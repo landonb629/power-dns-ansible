@@ -1,0 +1,136 @@
+---
+- name: install neeeded repos 
+  yum: 
+    name: "{{ install_repo }}"
+    state: present
+
+- name: import GPG key 
+  ansible.builtin.rpm_key: 
+    state: present
+    key: "{{ mysql_key }}"
+
+- name: enabling php 7 
+  ansible.builtin.command: yum-config-manager --enable remi-php73
+
+- name: install mysql packages
+  yum: 
+    name: "{{ install_packages_mysql }}"
+    state: present
+
+- name: installing php packages
+  yum:
+    name: "{{ install_packages_php }}"
+    state: present
+
+- name: installing pear packages 
+  yum: 
+    name: "{{ install_packages_pear }}"
+    state: present
+
+- name: Changing Auth methods
+  lineinfile:
+    path: /etc/my.cnf
+    line: 'default-authentication-plugin=mysql_native_password'
+    insertbefore: datadir=/var/lib/mysql* 
+  register: trigger
+  notify: Restart MySQL
+
+- name: triggering restart
+  command: /bin/true
+  notify: Restart MySQL
+
+- name: flush handlers
+  meta: flush_handlers
+
+- name: Get temporary root password 
+  shell: "grep 'A temporary password is generated for root@localhost' /var/log/mysqld.log | awk -F ' ' '{print $(NF)}' | tail -1"
+  register: root_password
+    #  when: trigger.changed
+
+- name: testing login to see if sql has already been configured
+  ansible.builtin.command: mysql --user root --password={{ mysql_root_password }} --execute="show databases;"
+  ignore_errors: True
+  register: sql_smoke_screen
+  changed_when:
+    - '"FAILED!" in sql_smoke_screen.stderr'
+
+- name: Allow SQL logins
+  ansible.builtin.command: mysql --user root --password={{ root_password.stdout }} --connect-expired-password --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{{ root_password.stdout }}';"
+  when: sql_smoke_screen.changed
+
+- name: update expired root password
+  ansible.builtin.command: mysql --user root --password={{ root_password.stdout }} --connect-expired-password --execute="ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_password }}';"
+  when: sql_smoke_screen.changed
+
+- name: install pdns
+  yum: 
+    name: "{{ install_packages_pdns }}"
+    state: present
+
+- name: creating my.cnf file 
+  template:
+    src: my.cnf.j2
+    dest: /root/.my.cnf
+    owner: root
+    mode: 0600
+  notify: Restart MySQL
+
+- name: Creating database for powerdns 
+  mysql_db:
+    login_unix_socket: /var/lib/mysql/mysql.sock #may have to write a task to find this info
+    login_password: "{{ mysql_root_password }}"
+    login_user: root
+    name: powerdns
+
+- name: Copying database file over
+  copy: 
+    src: files/databases.sql
+    dest: /tmp/databases.sql
+  register: databases_sql
+
+- name: Creating PDNS database tables
+  mysql_db: 
+    login_unix_socket: /var/lib/mysql/mysql.sock
+    login_password: "{{ mysql_root_password }}"
+    login_user: root
+    name: powerdns 
+    state: import
+    target: /tmp/databases.sql
+  when: databases_sql.changed
+
+- name: remove current pdns launch type 
+  lineinfile: 
+    path: /etc/pdns/pdns.conf
+    regexp: '^%launch=bind'
+    state: absent
+  register: pdns_config
+
+- name: configure pdns file 
+  blockinfile:
+    path: /etc/pdns/pdns.conf
+    marker: "##ansible managed configuration"
+    insertafter: "launch which backends"
+    block: | 
+      launch=gmysql
+      gmysql-host=localhost
+      gmysql-user=power_admin
+      gmysql-password={{ mysql_root_password }}
+      gmysql-dbname=powerdns
+  when: pdns_config.changed
+
+- name: enabling services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  with_items:
+    - "httpd"
+    - "pdns"
+    - "mysqld"
+
+
+- name: creating directory for poweradmin 
+  copy:
+    src: files/poweradmin-2.2.1/
+    dest: /var/www/html/poweradmin/
+  notify: Restart Httpd

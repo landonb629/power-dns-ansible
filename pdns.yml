@@ -1,0 +1,6 @@
+---
+- name: powerdns
+  hosts: powerdns
+  become: yes
+  roles:
+    - powerdns

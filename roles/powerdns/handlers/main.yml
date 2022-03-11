@@ -1,0 +1,10 @@
+---
+- name: Restart MySQL
+  ansible.builtin.service:
+    name: mysqld
+    state: restarted
+
+- name: Restart Httpd
+  ansible.builtin.service:
+    name: httpd
+    state: restarted

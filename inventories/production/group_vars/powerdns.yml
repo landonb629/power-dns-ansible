@@ -1,0 +1,41 @@
+--- 
+mysql_root_password: DiLeH76!Ldndye
+pdns_password: ChangeMe34! 
+mysql_key: https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
+install_repo: 
+  - https://repo.mysql.com/mysql80-community-release-el7-3.noarch.rpm
+  - http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+  - http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+install_packages_mysql:
+  - epel-release
+  - mysql-community-server
+  - MySQL-python
+install_packages_php:
+  - httpd
+  - php #this might have to be php73 for centos
+  - php-common #this is just needed for amazon linux 
+  - php-devel
+  - php-gd
+  - php-imap
+  - php-ldap
+  - php-mysql
+  - php-odbc
+  - php-pear
+  - php-xml
+  - php-xmlrpc
+  - php-mbstring
+  - php-mcrypt
+  - php-mhash
+  - gettext
+install_packages_pdns:
+  - epel-release
+  - pdns
+  - pdns-backend-mysql
+  - yum-utils 
+install_packages_pear:
+  - php-pear-DB
+  - php-pear-MDB2-Driver-mysqli
+services_enabled: 
+  - mysqld
+  - pdns
+  - httpd
