@@ -52,7 +52,7 @@
   ignore_errors: True
   register: sql_smoke_screen
   changed_when:
-    - '"FAILED!" in sql_smoke_screen.stderr'
+    - '"Access denied for user" in sql_smoke_screen.stderr'
 
 - name: Allow SQL logins
   ansible.builtin.command: mysql --user root --password={{ root_password.stdout }} --connect-expired-password --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '{{ root_password.stdout }}';"
